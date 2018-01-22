@@ -2,56 +2,105 @@ theory DiscMaths
   imports Main
 begin
 
-lemma dvd_trans:
-  assumes "a dvd b" and "b dvd c"
-  shows "a dvd c"
-  using assms dvd_def by auto
+text \<open>Section 1.2 Question 7(c)\<close>
 
-definition divides :: "int \<Rightarrow> int \<Rightarrow> bool" (infix "\<parallel>" 50)
-  where "a \<parallel> b \<equiv> (\<exists>k. b = a * k)"
-
-lemma divides_trans [trans]:
-  assumes "a \<parallel> b" and "b \<parallel> c"
-  shows "a \<parallel> c"
+lemma dvd_linear_comb:
+  fixes d::int
+  assumes "d dvd m" and "d dvd n"
+  shows "d dvd (k*m + l*n)"
 proof -
-  from assms obtain v where "b = a * v"
-    using divides_def by blast
-  moreover from assms obtain w where "c = b * w"
-    using divides_def by blast
-  ultimately have "c = a * (v * w)"
-    by (simp add: mult.assoc)
-  then show ?thesis
-    by (simp add: divides_def)
+  from \<open>d dvd m\<close> obtain i where "m = d*i"
+    using dvdE by blast
+  moreover from \<open>d dvd n\<close> obtain j where "n = d*j"
+    using dvdE by blast
+  ultimately have "k*m + l*n = d*(k*i + l*j)"
+    using int_distrib by simp
+  thus "d dvd (k*m + l*n)"
+    using dvdI by blast
 qed
 
-definition even :: "int \<Rightarrow> bool" where
-  "even n \<equiv> (\<exists>i::int. n = 2 * i)"
 
-definition odd :: "int \<Rightarrow> bool" where
-  "odd n \<equiv> (\<exists>i::int. n = 2 * i + 1)"
+text \<open>Euclid's algorithm\<close>
 
-lemma even_not_odd:
-  shows "even n \<longleftrightarrow> \<not> odd n"
-using even_def odd_def by presburger
+fun gcd :: "nat \<Rightarrow> nat \<Rightarrow> nat" where
+  "gcd m 0 = m" |
+  "gcd m n = gcd n (m mod n)"
 
 
-lemma n_squared_even:
-  shows "even (n\<^sup>2) \<longleftrightarrow> even n"
-  apply(rule iffI)
-   apply(subgoal_tac "odd n \<Longrightarrow> odd (n * n)")
-    apply simp
-    apply simp
-  apply(simp add: even_def, erule exE)
-  apply(rule_tac x="2*i*i + 2*i" in exI)
-  using prod_sums apply force
-  apply(simp add: even_def, erule exE)
-  apply(rule_tac x="2*i*i" in exI)
-  apply(simp add: power2_eq_square)
-  done
+text \<open>Definition of the GCD\<close>
 
-lemma prod_sums:
-  fixes a::int and b::int and c::int and d::int
-  shows "(a + b) * (c + d) = a*c + a*d + b*c + b*d"
-using int_distrib by simp
+definition gcd_props :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
+  "gcd_props m n x \<equiv> (x dvd m) \<and> (x dvd n) \<and> (\<forall>d. d dvd m \<and> d dvd n \<longrightarrow> d dvd x)"
+
+
+text \<open>Proof that Euclid's algorithm returns the GCD\<close>
+
+lemma euclid_gcd_props:
+  shows "gcd_props m n (gcd m n)"
+proof -
+  have "(gcd m n) dvd m \<and> (gcd m n) dvd n"
+  proof(induction m n rule: gcd.induct)
+    case (1 m)
+    then show ?case by simp
+  next
+    case (2 m v)
+    then show ?case using dvd_mod_imp_dvd by auto
+  qed
+  moreover have "\<forall>d. d dvd m \<and> d dvd n \<longrightarrow> d dvd (gcd m n)"
+  proof(induction m n rule: gcd.induct)
+    case (1 m)
+    then show ?case by simp
+  next
+    case (2 m v)
+    then show ?case by (simp add: dvd_mod)
+  qed
+  ultimately show "gcd_props m n (gcd m n)" by (simp add: gcd_props_def)
+qed
+
+
+text \<open>Properties of GCD: commutativity, linearity, associativity\<close>
+
+lemma gcd_commute:
+  shows "gcd m n = gcd n m"
+proof -
+  fix x::nat
+  have "gcd_props m n x \<longleftrightarrow> gcd_props n m x"
+    using gcd_props_def by auto
+  thus "gcd m n = gcd n m"
+    using dvd_antisym euclid_gcd_props gcd_props_def by auto
+qed
+
+lemma gcd_linear:
+  shows "i * (gcd m n) = gcd (i*m) (i*n)"
+proof(induction m n rule: gcd.induct)
+  case (1 m)
+  then show ?case by simp
+next
+  case (2 m v)
+  then show ?case by (metis divisors_zero gcd.elims mult_eq_if mult_mod_right nat.simps(3))
+qed
+
+lemma gcd_assoc:
+  shows "gcd l (gcd m n) = gcd (gcd l m) n"
+by (meson dvd_antisym dvd_trans euclid_gcd_props gcd_props_def)
+
+
+text \<open>Section 3.2 Question 2\<close>
+
+lemma gcd_coprime_prod:
+  assumes "gcd a c = 1"
+  shows "gcd (a*b) c = gcd b c"
+proof -
+  have "gcd b c = gcd (b * (gcd a c)) c"
+    using assms by simp
+  moreover have "... = gcd (gcd (b*a) (b*c)) c"
+    by (simp add: gcd_linear)
+  moreover have "... = gcd (a*b) (gcd (b*c) c)"
+    by (simp add: gcd_assoc mult.commute)
+  moreover have "... = gcd (a*b) (c*(gcd b 1))"
+    by (metis gcd_linear mult.commute mult.right_neutral)
+  ultimately show "gcd (a*b) c = gcd b c"
+    by simp
+qed
 
 end
